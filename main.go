@@ -2,10 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
-	"errors"
 	"os"
 	"strings"
 
@@ -77,7 +77,7 @@ func prepareInternal() error {
 	}
 
 	b2, err := backblaze.NewB2(backblaze.Credentials{
-		AccountID: accountID,
+		AccountID:      accountID,
 		ApplicationKey: appKey,
 	})
 	if err != nil {
@@ -119,19 +119,19 @@ func store(key, file string) {
 	}
 	defer fh.Close()
 
-	res, err := bucket.ListFileNames(prefix + key, 1)
+	res, err := bucket.ListFileNames(prefix+key, 1)
 	if err != nil {
 		log.Printf("Couldn't list filenames: %v", err)
 		return
 	}
 
-	if len(res.Files) > 0 && res.Files[0].Name == prefix + key {
+	if len(res.Files) > 0 && res.Files[0].Name == prefix+key {
 		// file already stored
 		ok = true
 		return
 	}
 
-	_, err = bucket.UploadFile(prefix + key, nil, fh)
+	_, err = bucket.UploadFile(prefix+key, nil, fh)
 	if err != nil {
 		log.Printf("Couldn't upload file: %v", err)
 		return
@@ -183,13 +183,13 @@ func checkPresent(key string) {
 		out.WriteString("CHECKPRESENT-" + ret + " " + key + "\n")
 	}()
 
-	res, err := bucket.ListFileNames(prefix + key, 1)
+	res, err := bucket.ListFileNames(prefix+key, 1)
 	if err != nil {
 		log.Printf("Couldn't list filenames: %v", err)
 		return
 	}
 
-	if len(res.Files) == 0 || res.Files[0].Name != prefix + key {
+	if len(res.Files) == 0 || res.Files[0].Name != prefix+key {
 		ret = "FAILURE"
 	} else {
 		ret = "SUCCESS"
@@ -202,13 +202,13 @@ func remove(key string) {
 		out.WriteString("REMOVE-" + ret + " " + key + "\n")
 	}()
 
-	res, err := bucket.ListFileNames(prefix + key, 1)
+	res, err := bucket.ListFileNames(prefix+key, 1)
 	if err != nil {
 		log.Printf("Couldn't list filenames: %v", err)
 		return
 	}
 
-	if len(res.Files) == 0 || res.Files[0].Name != prefix + key {
+	if len(res.Files) == 0 || res.Files[0].Name != prefix+key {
 		// File already non-existent
 		ret = "SUCCESS"
 		return
