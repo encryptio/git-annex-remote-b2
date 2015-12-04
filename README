@@ -1,6 +1,12 @@
-To build from source, run `go get github.com/encryptio/git-annex-remote-b2`.
+# Installation
 
-== Usage ==
+Binaries are available in the
+[releases page](https://github.com/encryptio/git-annex-remote-b2/releases).
+
+To build from source, [set up a GOPATH](https://golang.org/doc/code.html) and
+then run `go get github.com/encryptio/git-annex-remote-b2`.
+
+# Usage
 
 After putting `git-annex-remote-b2` in your `$PATH`, use it like any other
 external remote:
