@@ -2,6 +2,9 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -119,6 +122,30 @@ func store(key, file string) {
 	}
 	defer fh.Close()
 
+	shaReady := make(chan struct{})
+	var haveSHA []byte
+	var contentLength int64
+	var shaError error
+	go func() {
+		defer close(shaReady)
+
+		sha := sha1.New()
+		n, err := io.Copy(sha, fh)
+		if err != nil {
+			shaError = err
+			return
+		}
+		contentLength = n
+
+		_, err = fh.Seek(0, 0)
+		if err != nil {
+			shaError = err
+			return
+		}
+
+		haveSHA = sha.Sum(nil)
+	}()
+
 	res, err := bucket.ListFileNames(prefix+key, 1)
 	if err != nil {
 		log.Printf("Couldn't list filenames: %v", err)
@@ -126,12 +153,38 @@ func store(key, file string) {
 	}
 
 	if len(res.Files) > 0 && res.Files[0].Name == prefix+key {
-		// file already stored
-		ok = true
+		// file probably already stored; make sure using the SHA1
+		b2file, err := bucket.GetFileInfo(res.Files[0].ID)
+		if err != nil {
+			log.Printf("Couldn't get file info for %v: %v", res.Files[0].ID, err)
+			return
+		}
+		if b2file != nil {
+			<-shaReady
+
+			wantSHA, err := hex.DecodeString(b2file.ContentSha1)
+			if err == nil && bytes.Equal(haveSHA, wantSHA) {
+				ok = true
+				return
+			}
+
+			// File exists but is the incorrect data. Delete the old version
+			// first.
+			_, err = bucket.DeleteFileVersion(prefix+key, b2file.ID)
+			if err != nil {
+				log.Printf("Couldn't delete old file version: %v", err)
+				return
+			}
+		}
+	}
+
+	<-shaReady
+	if shaError != nil {
+		log.Printf("Couldn't hash local file %v: %v", file, shaError)
 		return
 	}
 
-	_, err = bucket.UploadFile(prefix+key, nil, fh)
+	_, err = bucket.UploadHashedFile(prefix+key, nil, fh, hex.EncodeToString(haveSHA), contentLength)
 	if err != nil {
 		log.Printf("Couldn't upload file: %v", err)
 		return
