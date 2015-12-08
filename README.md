@@ -22,3 +22,6 @@ B2 credentials may either be given as arguments to `initremote` (
 `$B2_APP_KEY` and `$B2_ACCOUNT_ID`. If you pass them as arguments to `initremote`,
 the credentials will be stored in the git-annex repository and thus will be
 available to all clones of it.
+
+Optionally, you may pass `prefix=something` to have `git-annex-remote-b2` prepend
+`something/` to the keys it stores in B2.
