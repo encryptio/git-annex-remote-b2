@@ -184,7 +184,7 @@ func store(key, file string) {
 		return
 	}
 
-	_, err = bucket.UploadHashedFile(prefix+key, nil, fh, hex.EncodeToString(haveSHA), contentLength)
+	_, err = bucket.UploadHashedFile(prefix+key, nil, NewProgressReader(fh, out), hex.EncodeToString(haveSHA), contentLength)
 	if err != nil {
 		log.Printf("Couldn't upload file: %v", err)
 		return
@@ -221,7 +221,7 @@ func retrieve(key, file string) {
 	}
 	defer fh.Close()
 
-	_, err = io.Copy(fh, rc)
+	_, err = io.Copy(fh, NewProgressReader(rc, out))
 	if err != nil {
 		log.Printf("Couldn't download file: %v", err)
 		return
