@@ -134,20 +134,14 @@ func (be *B2Ext) Store(e *external.External, key, file string) error {
 		defer close(shaReady)
 
 		sha := sha1.New()
-		n, err := io.Copy(sha, fh)
-		if err != nil {
-			shaError = err
-			return
-		}
-		contentLength = n
-
-		_, err = fh.Seek(0, 0)
-		if err != nil {
-			shaError = err
+		contentLength, shaError = io.Copy(sha, fh)
+		if shaError != nil {
 			return
 		}
 
 		haveSHA = sha.Sum(nil)
+
+		_, shaError = fh.Seek(0, 0)
 	}()
 
 	res, err := be.bucket.ListFileNames(be.prefix+key, 1)
