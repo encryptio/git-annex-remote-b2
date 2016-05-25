@@ -261,7 +261,18 @@ func (be *B2Ext) WhereIs(e *external.External, key string) (string, error) {
 func main() {
 	h := &B2Ext{}
 
-	err := external.RunLoop(os.Stdin, os.Stdout, h)
+	var (
+		in  io.Reader = os.Stdin
+		out io.Writer = os.Stdout
+	)
+
+	if os.Getenv("GIT_ANNEX_EXTERNAL_B2_PROTOCOL_DEBUG") != "" {
+		fmt.Fprintf(os.Stderr, "git-annex-remote-b2: enabling protocol debug logging\n")
+		in = io.TeeReader(in, os.Stderr)
+		out = io.MultiWriter(out, os.Stderr)
+	}
+
+	err := external.RunLoop(in, out, h)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
