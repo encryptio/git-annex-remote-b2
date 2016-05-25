@@ -31,7 +31,7 @@ git annex init
 BUCKET_NAME="git-annex-test-$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)"
 
 git annex initremote noencrypt type=external externaltype=b2 encryption=none bucket="$BUCKET_NAME" prefix=raw
-git annex initremote encrypt type=external externaltype=b2 encryption=shared bucket="$BUCKET_NAME" prefix=enc
+git annex initremote --fast encrypt type=external externaltype=b2 encryption=shared bucket="$BUCKET_NAME" prefix=enc
 
 cp bin/git-annex-remote-b2 somefile
 git annex add somefile
