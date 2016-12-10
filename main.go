@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/encryptio/go-git-annex-external/external"
 	"gopkg.in/kothar/go-backblaze.v0"
@@ -17,6 +18,13 @@ import (
 type B2Ext struct {
 	bucket *backblaze.Bucket
 	prefix string
+
+	lastList struct {
+		setAt time.Time
+		file  string
+		found bool
+		id    string
+	}
 }
 
 func authenticate(e *external.External) (*backblaze.B2, error) {
@@ -69,6 +77,45 @@ func getBucketConfig(e *external.External) (bucket string, prefix string, err er
 	}
 
 	return bucket, prefix, nil
+}
+
+func (be *B2Ext) listFileCached(file string) (found bool, fileID string, err error) {
+	// Caching the last result of ListFileNames is no less safe than not caching
+	// it; the race condition of two concurrent git annex copy --to b2 processes
+	// sending the same file can result in a file with two identical versions in
+	// both cases.
+	//
+	// However, caching this reduces the number of ListFileNames to half of what
+	// it is during uploads (since git-annex always calls checkpresent which
+	// uses ListFileNames before uploading, but when uploading we also do
+	// upload elision by calling ListFileNames.)
+
+	if be.lastList.file != file || time.Since(be.lastList.setAt) > time.Second*15 {
+		res, err := be.bucket.ListFileNames(file, 1)
+		if err != nil {
+			return false, "", err
+		}
+
+		be.lastList.setAt = time.Now()
+		if len(res.Files) == 0 || res.Files[0].Name != file {
+			be.lastList.file = file
+			be.lastList.found = false
+			be.lastList.id = ""
+		} else {
+			be.lastList.file = file
+			be.lastList.found = true
+			be.lastList.id = res.Files[0].ID
+		}
+	}
+
+	return be.lastList.found, be.lastList.id, nil
+}
+
+func (be *B2Ext) clearListFileCache() {
+	be.lastList.setAt = time.Time{}
+	be.lastList.file = ""
+	be.lastList.found = false
+	be.lastList.id = ""
 }
 
 func (be *B2Ext) setup(e *external.External, canCreateBucket bool) error {
@@ -144,16 +191,16 @@ func (be *B2Ext) Store(e *external.External, key, file string) error {
 		_, shaError = fh.Seek(0, 0)
 	}()
 
-	res, err := be.bucket.ListFileNames(be.prefix+key, 1)
+	found, fileID, err := be.listFileCached(be.prefix + key)
 	if err != nil {
 		return fmt.Errorf("couldn't list filenames: %v", err)
 	}
 
-	if len(res.Files) > 0 && res.Files[0].Name == be.prefix+key {
+	if found {
 		// file probably already stored; make sure using the SHA1
-		b2file, err := be.bucket.GetFileInfo(res.Files[0].ID)
+		b2file, err := be.bucket.GetFileInfo(fileID)
 		if err != nil {
-			return fmt.Errorf("couldn't get file info for %#v: %v", res.Files[0].ID, err)
+			return fmt.Errorf("couldn't get file info for %#v: %v", fileID, err)
 		}
 		if b2file != nil {
 			<-shaReady
@@ -184,6 +231,9 @@ func (be *B2Ext) Store(e *external.External, key, file string) error {
 		external.NewProgressReader(fh, e),
 		hex.EncodeToString(haveSHA),
 		contentLength)
+
+	be.clearListFileCache()
+
 	if err != nil {
 		return fmt.Errorf("couldn't upload file: %v", err)
 	}
@@ -215,30 +265,27 @@ func (be *B2Ext) Retrieve(e *external.External, key, file string) error {
 }
 
 func (be *B2Ext) CheckPresent(e *external.External, key string) (bool, error) {
-	res, err := be.bucket.ListFileNames(be.prefix+key, 1)
+	found, _, err := be.listFileCached(be.prefix + key)
 	if err != nil {
 		return false, fmt.Errorf("couldn't list filenames: %v", err)
 	}
 
-	if len(res.Files) == 0 || res.Files[0].Name != be.prefix+key {
-		return false, nil
-	} else {
-		return true, nil
-	}
+	return found, nil
 }
 
 func (be *B2Ext) Remove(e *external.External, key string) error {
-	res, err := be.bucket.ListFileNames(be.prefix+key, 1)
+	found, fileID, err := be.listFileCached(be.prefix + key)
 	if err != nil {
 		return fmt.Errorf("couldn't list filenames: %v", err)
 	}
 
-	if len(res.Files) == 0 || res.Files[0].Name != be.prefix+key {
+	if !found {
 		// File already non-existent, nothing to remove
 		return nil
 	}
 
-	_, err = be.bucket.DeleteFileVersion(res.Files[0].Name, res.Files[0].ID)
+	_, err = be.bucket.DeleteFileVersion(be.prefix+key, fileID)
+	be.clearListFileCache()
 	if err != nil {
 		return fmt.Errorf("couldn't delete file version: %v", err)
 	}
