@@ -18,6 +18,14 @@ B2 credentials may either be given as arguments to `initremote` ( `accountid=XXX
 
 Optionally, you may pass `prefix=something` to have `git-annex-remote-b2` prepend `something/` to the keys it stores in B2.
 
+Limitations
+===========
+
+Large files
+-----------
+
+By default, B2 only supports files up to 5GiB. To work around this limitation you can use [git-annex's chunk support](http://git-annex.branchable.com/chunking/) by passing `chunk=100MiB` when you do the initremote, or any time after by doing `git-annex enableremote b2 chunk=100MiB`.
+
 Improving the financial cost of this remote
 -------------------------------------------
 
